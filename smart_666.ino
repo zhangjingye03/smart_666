@@ -4,8 +4,8 @@
 int RECV_PIN = 11;
 IRrecv irrecv(RECV_PIN);
 decode_results results;*/
-bool autoC = false;
-bool noAuto = false;
+bool autoC = true;
+bool noAuto = false; bool no522 = false;
 bool atMain = true;
 unsigned int mainLoop = 0; unsigned short countLoop = 60;
 bool atCount = false; bool showGK = true;
@@ -17,7 +17,6 @@ bool atRTC = false; bool showTime = true;
 #include <Wire.h>
 #include "RTClib.h"
 RTC_DS3231 rtc;
-//char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 // MFRC522
 #include <SPI.h>
@@ -45,17 +44,17 @@ void setup() {
   Serial.println(F("----------------------------------"));
   Serial.println(F("Serial successfully opened @ 115200"));
   pinMode(4,OUTPUT);
-  // digitalWrite(4, HIGH);
+  digitalWrite(3, HIGH); // for emergency backup
   Serial.print(F("Configured D")); Serial.print(AUDIO_CONTROL); Serial.println(F(" for audio control."));
   delay(200);
   Serial.println(F("Initializing I2C driver ..."));
   if (!rtc.begin()) {
-    Serial.println(F("[x] Couldn't find RTC module.")); noAuto = true;
+    Serial.println(F("[x] Couldn't find RTC module.")); noAuto = true; autoC = false;
   } else {
     if (rtc.lostPower()) {
       Serial.println(F("[!] RTC lost power. Resetting..."));
       rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-      noAuto = true;
+      noAuto = true; autoC = false;
     }
     DateTime now = rtc.now();
     temp = rtc.getTemperature();
@@ -76,7 +75,7 @@ void setup() {
     mfrc522.PCD_Init(); // Init MFRC522 card
     Serial.println(F("[OK] MFRC522 using SPI Bus."));
   } else {
-    Serial.println(F("[x] Unable to config MFRC522."));
+    Serial.println(F("[x] Unable to config MFRC522.")); no522 = true;
   }
   delay(200);
   /*Serial.println("Initializing IRemote driver ...");
@@ -134,57 +133,77 @@ void loop() {
     delay(2);
   }
   if (ttl.length() > 0) {
-    if (ttl == F("[BN:1]\r\n")) { // manual on, [BN:1]
-      autoC = false;
-      on(); 
-    } else if (ttl == F("[BN:2]\r\n")) { // manual off, [BN:2]
-      autoC = false; 
-      off();
-    } else if (ttl == F("[BN:3]\r\n")) { // auto mode, [BN:3]
-      autoC = !autoC;
-    }
     if (ttl != "OK" /*|| ttl != "\r\nOK" || ttl != "\r\nOK\r\n" || ttl != "OK\r\n" || ttl != "OKOK" */) {
-      if (ttl == F("[BN:32]\r\n")) atMain = true; else atMain = false;
-      if (ttl == F("[BN:31]\r\n") || ttl == F("[BN:1]\r\n") || ttl == F("[BN:2]\r\n") || ttl == F("[BN:3]\r\n")) atCtrl = true; else atCtrl = false;
-      if (ttl == F("[BN:29]\r\n")) atCard = true; else atCard = false;
-      if (ttl == F("[BN:25]\r\n") || ttl == F("[BN:22]\r\n") || ttl == F("[BN:21]\r\n") || ttl == F("[BN:20]\r\n")
-       || ttl == F("[BN:19]\r\n") || ttl == F("[BN:18]\r\n") || ttl == F("[BN:17]\r\n") || ttl == F("[BN:16]\r\n")) { 
+      int bn = 0; 
+      sscanf(ttl.c_str(), "[BN:%d]\r\n", &bn);
+      //Serial.println(bn,DEC);
+      if (bn == 32) atMain = true; else atMain = false;
+      if (bn == 31 || bn == 1 || bn == 2 || bn == 3) {
+        atCtrl = true; 
+        if (bn == 1) {
+          autoC = false; on();
+        } else if (bn == 2) {
+          autoC = false; off();
+        } else if (bn == 3) {
+          autoC = !autoC;
+        }
+      } else atCtrl = false;
+      if (bn == 29) atCard = true; else atCard = false;
+      if (bn == 25 || bn == 22 || bn == 21 || bn == 20 || bn == 19 || bn == 18 || bn == 17 || bn == 16) { 
         atRTC = true;
         DateTime now = rtc.now();
-        int d1, d2, d3, e1, e2, e3;
-        d1 = (showTime) ? now.hour() : now.year();
-        d2 = (showTime) ? now.minute() : now.month();
-        d3 = (showTime) ? now.second() : now.day(); 
-        e1 = (!showTime) ? now.hour() : now.year();
-        e2 = (!showTime) ? now.minute() : now.month();
-        e3 = (!showTime) ? now.second() : now.day(); 
-        if (ttl == F("[BN:16]\r\n")) { // switch datetime, 16
+        DateTime adj;
+        if (bn == 16) { // switch datetime, 16
           showTime = !showTime;
         } else {
-          if (ttl == F("[BN:22]\r\n")) { // up1
-             d1++;
-          } else if (ttl == F("[BN:21]\r\n")) { // down1
-            d1--;
-          } else if (ttl == F("[BN:20]\r\n")) { // up2
-            d2++;
-          } else if (ttl == F("[BN:19]\r\n")) { // down2
-            d2--;
-          } else if (ttl == F("[BN:18]\r\n")) { // up3
-            d3++;
-          } else if (ttl == F("[BN:17]\r\n")) { // down3
-            d3--;
+          if (bn == 22) { // up1
+            if (showTime) { // hh
+              adj = DateTime(now + TimeSpan(3600));
+            } else { // YYYY
+              adj = DateTime(now + TimeSpan(365, 0, 0, 0));
+            }
+          } else if (bn == 21) { // down1
+            if (showTime) { // hh
+              adj = DateTime(now - TimeSpan(3600));
+            } else { // YYYY
+              adj = DateTime(now - TimeSpan(365, 0, 0, 0));
+            }
+          } else if (bn == 20) { // up2
+            if (showTime) { // mm
+              adj = DateTime(now + TimeSpan(60));
+            } else { // MM
+              adj = DateTime(now + TimeSpan(30, 0, 0, 0));
+            }
+          } else if (bn == 19) { // down2
+            if (showTime) { // mm
+              adj = DateTime(now - TimeSpan(60));
+            } else { // MM
+              adj = DateTime(now - TimeSpan(30, 0, 0, 0));
+            }
+          } else if (bn == 18) { // up3
+            if (showTime) { // ss
+              adj = DateTime(now + TimeSpan(1)); // +1s
+            } else { // DD
+              adj = DateTime(now + TimeSpan(1, 0, 0, 0));
+            }
+          } else if (bn == 17) { // down3
+            if (showTime) { // ss
+              adj = DateTime(now - TimeSpan(1));
+            } else { // DD
+              adj = DateTime(now - TimeSpan(1, 0, 0, 0));
+            }
           }
-          if (showTime) rtc.adjust(DateTime(e1, e2, e3, d1, d2, d3)); else rtc.adjust(DateTime(d1, d2, d3, e1, e2, e3));
+          rtc.adjust(adj);
         }
       } else {
         if (atRTC) {
-          if (ttl != F("[BN:0]\r\n")) atRTC = false;
+          if (bn != 0) atRTC = false;
         }
       }
        
-      if (ttl == F("[BN:30]\r\n")) {
+      if (bn == 30) {
         if (noAuto) {
-          Serial.println(F("RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF")); //RTC模块故障
+          Serial.println("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);"); //DS12(0,0,'RTC模块故障',1);
         } else {
           atCount = true; countLoop = 59;
         }
@@ -235,7 +254,7 @@ if (mainLoop == 65535) {
       Serial.print(F("SBC(58);DS16(126,63,'\xD7\xD4\xB6\xAF\xC4\xA3\xCA\xBD',0,0);")); //DS16(126,63,'自动模式',0,0);
     }
     if (noAuto) {
-      Serial.println(F("RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF")); //RTC模块故障
+      Serial.println(F("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);")); //DS12(0,0,'RTC模块故障',1);
     } else {
       DateTime now = rtc.now();
       Serial.print(F("SBC(53);DS12(133,152,'"));
@@ -245,17 +264,21 @@ if (mainLoop == 65535) {
     }
   }
   if (atRTC) {
-    DateTime now = rtc.now();
-    Serial.print(F("SBC(0);CBOF(0,32,220,65,5,0);"));
-    if (showTime) {
-      Serial.print(F("DS32(56,32,'"));
-      if (now.hour() < 10) { Serial.print(0); Serial.print(now.hour()); } else Serial.print(now.hour()); Serial.print(F("',1,0);DS32(90,32,'/',1,0);DS32(102,32,'"));
-      if (now.minute() < 10) { Serial.print(0); Serial.print(now.minute()); } else Serial.print(now.minute()); Serial.print(F("',1,0);DS32(135,32,'/',1,0);DS32(146,32,'"));
-      if (now.second() < 10) { Serial.print(0); Serial.print(now.second()); } else Serial.print(now.second()); Serial.println(F("',1,0);"));
+    if (noAuto) {
+      Serial.println(F("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);")); //DS12(0,0,'RTC模块故障',1);
     } else {
-      Serial.print(F("DS32(30,32,'")); Serial.print(now.year()); Serial.print(F("',1,0);DS32(90,32,'/',1,0);DS32(102,32,'"));
-      Serial.print(now.month()); Serial.print(F("',1,0);DS32(135,32,'/',1,0);DS32(146,32,'"));
-      Serial.print(now.day()); Serial.println(F("',1,0);"));
+      DateTime now = rtc.now();
+      Serial.print(F("SBC(0);CBOF(0,32,220,65,5,0);"));
+      if (showTime) {
+        Serial.print(F("DS32(56,32,'"));
+        if (now.hour() < 10) { Serial.print(0); Serial.print(now.hour()); } else Serial.print(now.hour()); Serial.print(F("',1,0);DS32(90,32,'/',1,0);DS32(102,32,'"));
+        if (now.minute() < 10) { Serial.print(0); Serial.print(now.minute()); } else Serial.print(now.minute()); Serial.print(F("',1,0);DS32(135,32,'/',1,0);DS32(146,32,'"));
+        if (now.second() < 10) { Serial.print(0); Serial.print(now.second()); } else Serial.print(now.second()); Serial.println(F("',1,0);"));
+      } else {
+        Serial.print(F("DS32(30,32,'")); Serial.print(now.year()); Serial.print(F("',1,0);DS32(90,32,'/',1,0);DS32(102,32,'"));
+        Serial.print(now.month()); Serial.print(F("',1,0);DS32(135,32,'/',1,0);DS32(146,32,'"));
+        Serial.print(now.day()); Serial.println(F("',1,0);"));
+      }
     }
   }
   if (atCard) {
@@ -326,11 +349,13 @@ if (mainLoop == 65535) {
       case 12: if (tc >= 0503 && tc <= 0600 || tc >= 5500) off(); else on(); break;
       case 13: off(); break;
       case 14: if (tc >= 0000 && tc <= 2000) off(); else on(); break;
-      case 15: if (tc >= 0503 && tc <= 0530) off(); else on(); break;
+      case 15: if (tc >= 0503 && tc <= 0630) off(); else on(); break;
       case 16: if (tc >= 0003 && tc <= 0100 || tc >= 5003 && tc <= 5100) off(); else on(); break;
       case 17: if (tc >= 1000 && tc <= 2000) off(); else on(); break;
-      case 22: off(); break;
-      case 18: case 19: case 20: case 21: case 23: on(); break;
+      case 18: if (tc >= 5000) off(); else on(); break;
+      case 20: if (tc >= 2003 && tc <= 2100) off(); else on(); break;
+      case 19: case 22: off(); break;
+      case 21: case 23: on(); break;
     }
   }
 
