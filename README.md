@@ -15,10 +15,12 @@ An arduino program to control or show something in my dear class 6.
 
 使用`Arduino IDE 1.6.13`编译
 
-`Sketch uses 17,342 bytes (53%) of program storage space. Maximum is
+```
+Sketch uses 17,342 bytes (53%) of program storage space. Maximum is
 32,256 bytes.
 Global variables use 565 bytes (27%) of dynamic memory, leaving 1,483
-bytes for local variables. Maximum is 2,048 bytes.`
+bytes for local variables. Maximum is 2,048 bytes.
+```
 
 # 需求
 
