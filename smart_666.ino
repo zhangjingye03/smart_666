@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #define AUDIO_CONTROL 4
 #include "mycard.h"
 /*#include <IRremote.h>
@@ -33,7 +35,7 @@ void setup() {
   digitalWrite(2, HIGH);
   /*Serial.write(26);
   Serial.println("SPG(0);");*/
-  
+
   // LOGO
   delay(1500);
   Serial.begin(115200);
@@ -65,7 +67,7 @@ void setup() {
   delay(500);
   Serial.println(F("Initializing SPI driver ..."));
   SPI.begin();        // Init SPI bus
-  if (mfrc522.PCD_PerformSelfTest()) { 
+  if (mfrc522.PCD_PerformSelfTest()) {
     key.keyByte[0] = 0x00;
     key.keyByte[1] = 0x30;
     key.keyByte[2] = 0x03;
@@ -90,7 +92,7 @@ void setup() {
   Serial.println(F("SPG(4);"));
   delay(100);
   Serial.print(F("DS24(80,80,'")); Serial.print(temp,1); Serial.println(F(" \\'C',0,0);"));
-  delay(100); atMain = true;
+  delay(500); atMain = true;
 }
 
 void on(){
@@ -134,12 +136,12 @@ void loop() {
   }
   if (ttl.length() > 0) {
     if (ttl != "OK" /*|| ttl != "\r\nOK" || ttl != "\r\nOK\r\n" || ttl != "OK\r\n" || ttl != "OKOK" */) {
-      int bn = 0; 
+      int bn = 0;
       sscanf(ttl.c_str(), "[BN:%d]\r\n", &bn);
       //Serial.println(bn,DEC);
       if (bn == 32) atMain = true; else atMain = false;
       if (bn == 31 || bn == 1 || bn == 2 || bn == 3) {
-        atCtrl = true; 
+        atCtrl = true;
         if (bn == 1) {
           autoC = false; on();
         } else if (bn == 2) {
@@ -149,11 +151,11 @@ void loop() {
         }
       } else atCtrl = false;
       if (bn == 29) atCard = true; else atCard = false;
-      if (bn == 25 || bn == 22 || bn == 21 || bn == 20 || bn == 19 || bn == 18 || bn == 17 || bn == 16) { 
+      if (bn == 25 || bn == 22 || bn == 21 || bn == 20 || bn == 19 || bn == 18 || bn == 17 || bn == 16) {
         atRTC = true;
         DateTime now = rtc.now();
         DateTime adj;
-        if (bn == 16) { // switch datetime, 16
+        if (bn == 16 || bn == 25) { // switch datetime, 16
           showTime = !showTime;
         } else {
           if (bn == 22) { // up1
@@ -200,19 +202,19 @@ void loop() {
           if (bn != 0) atRTC = false;
         }
       }
-       
+
       if (bn == 30) {
         if (noAuto) {
           Serial.println("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);"); //DS12(0,0,'RTC模块故障',1);
         } else {
-          atCount = true; countLoop = 59;
+          atCount = true; countLoop = 60;
         }
       } else atCount = false;
       delay(100);
     }
     ttl = "";
   }
-  
+
 // not always run code
 if (mainLoop == 65535) {
   // Judge where I am
@@ -282,6 +284,7 @@ if (mainLoop == 65535) {
     }
   }
   if (atCard) {
+    if (no522) { Serial.println(F("DS12(0,0,'NFC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);")); mainLoop++; return; }
     // Look for new cards
     if (!mfrc522.PICC_IsNewCardPresent()) { mainLoop++; return; }
     if (!mfrc522.PICC_ReadCardSerial()) { mainLoop++; return; }
@@ -294,7 +297,6 @@ if (mainLoop == 65535) {
     }
     // In this sample we use the second sector,
     // that is: sector #1, covering block #4 up to and including block #7
-    byte sector         = 1;
     byte blockAddr      = 4;
     byte trailerBlock   = 7;
     MFRC522::StatusCode status;
@@ -316,7 +318,7 @@ if (mainLoop == 65535) {
       flag = 1;
     }
     float current = 0.01; float last = 0.02;
-    current = getBnc(buffer[flag]); 
+    current = getBnc(buffer[flag]);
     last = getBnc(buffer[1-flag]);
     Serial.print(F("CBOF(13,54,113,154,5,3);"));
     Serial.print(F("SBC(3);"));
@@ -328,15 +330,15 @@ if (mainLoop == 65535) {
       Serial.print(F("BTN(26,13,54,113,154,4,138);"));
     }
     Serial.println();
-    
+
     // Halt PICC
     mfrc522.PICC_HaltA();
     // Stop encryption on PCD
     mfrc522.PCD_StopCrypto1();
-  } 
-  
+  }
+
   // Global auto audio control
-  if (autoC) { 
+  if (autoC) {
     DateTime now = rtc.now();
     byte h = now.hour(); byte m = now.minute(); byte s = now.second();
     int tc = m * 100 + s;
@@ -346,11 +348,11 @@ if (mainLoop == 65535) {
       case 9: if (tc >= 2003 && tc <= 2100) off(); else on(); break;
       case 10: if (tc >= 1003 && tc <= 1100) off(); else on(); break;
       case 11: if (tc >= 1503 && tc <= 1600) off(); else on(); break;
-      case 12: if (tc >= 0503 && tc <= 0600 || tc >= 5500) off(); else on(); break;
+      case 12: if ((tc >= 503 && tc <= 600) || tc >= 5500) off(); else on(); break;
       case 13: off(); break;
-      case 14: if (tc >= 0000 && tc <= 2000) off(); else on(); break;
-      case 15: if (tc >= 0503 && tc <= 0630) off(); else on(); break;
-      case 16: if (tc >= 0003 && tc <= 0100 || tc >= 5003 && tc <= 5100) off(); else on(); break;
+      case 14: if (tc >= 0 && tc <= 2000) off(); else on(); break;
+      case 15: if (tc >= 503 && tc <= 600) off(); else on(); break;
+      case 16: if ((tc >= 3 && tc <= 100) || (tc >= 5003 && tc <= 5100)) off(); else on(); break;
       case 17: if (tc >= 1000 && tc <= 2000) off(); else on(); break;
       case 18: if (tc >= 5000) off(); else on(); break;
       case 20: if (tc >= 2003 && tc <= 2100) off(); else on(); break;
