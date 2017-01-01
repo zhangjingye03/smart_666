@@ -1,4 +1,4 @@
-# smart_666
+# smart_666 ![travis-ci](https://travis-ci.org/zhangjingye03/smart_666.svg?branch=master)
 An arduino program to control or show something in my dear class 6.
 
 # 功能
