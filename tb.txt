@@ -1,0 +1,18 @@
+GLOBAL (ABSOLUTE)
+0x0000	总共多少题count (最大0xFFFF)
+0x0002	第1题地址
+0x0004	第2题地址
+。。。
+0x0002 + （count-1） * 2  		第n题地址
+0x0002 + count * 2 == (int) *(0x01)	第1题内容
+
+NORMAL STORAGE BLOCKS (RELATIVE)
+0x00			题目长度sizeQ（最长受屏幕显示限制，51*2个汉字，即51*2*2=204个字节）
+0x01			选项A长度sizeA
+0x02			选项B长度sizeB
+0x03			选项C长度sizeC
+0x04			选项D长度sizeD
+0x05			正确答案
+0x06			题目内容
+0x06 + sizeQ		选项A内容（最大8个汉字，即8*2=16字节）
+0x06 + sizeQ + sizeA	选项B内容
