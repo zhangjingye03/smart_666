@@ -17,6 +17,8 @@ An arduino program to control or show something in my dear class 6.
 
 * 贪吃蛇小游戏（只用了70行哦）
 
+* 六六题霸（刷题工具）
+
 # 内存占用
 
 使用`platformIO 3.3.0a1`编译
@@ -26,11 +28,15 @@ AVR Memory Usage
 ----------------
 Device: atmega328p
 
-Program:   15920 bytes (48.6% Full)
+Program:   17442 bytes (53.2% Full)
+
 (.text + .data + .bootloader)
 
-Data:        663 bytes (32.4% Full)
+Data:        716 bytes (35.0% Full)
 (.data + .bss + .noinit)
+
+
+ [SUCCESS] Took 4.31 seconds
 ```
 
 # 需求
@@ -41,7 +47,7 @@ Data:        663 bytes (32.4% Full)
 
 * ~~MFRC-522 x 1 (NFC模块)~~
 
-* DS3231 x 1 (RTC模块、温度传感器)
+* DS3231 x 1 (RTC模块、温度传感器、24C32储存模块)
 
 * CH34x/PL230x x 1 (usb-ttl converter)
 
@@ -68,6 +74,10 @@ Data:        663 bytes (32.4% Full)
 
 ![setup_env](https://raw.githubusercontent.com/zhangjingye03/smart_666/master/setup_env.jpg)
 
+# 题霸flash区块说明
+
+详见`tb.txt`，示例文件`example.csv`以及转换程序`convert.php`
+
 # License
 
 MIT
@@ -76,4 +86,4 @@ MIT
 
 * adafruit for [RTClib](https://github.com/adafruit/RTClib)
 
-* ~~miguelbalboa and his communities for [rfid](https://github.com/miguelbalboa/rfid)~~
+* cyberp for [AT24CX](https://github.com/cyberp/AT24Cx)

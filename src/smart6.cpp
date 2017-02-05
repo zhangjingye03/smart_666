@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "snake.h"
+#include "66tb.h"
 #include "birthday.h"
 #define AUDIO_CONTROL 4
 
@@ -7,11 +8,12 @@ bool autoC = true;
 bool noAuto = false;
 bool atMain = true;
 unsigned int mainLoop = 0; unsigned char countLoop = 60;
-bool atCount = false; char showGK = -1; bool scr = false; unsigned char scrLoop = 0;
-bool atCtrl = false; bool out = true;
-bool atRTC = false; bool showTime = true;
-bool atSnake = false; snake *sp = NULL;
-char dir = 4;
+int w = 4;
+char showGK = -1; bool scr = false; unsigned char scrLoop = 0;
+bool out = true;
+bool showTime = true;
+snake *sp = NULL;
+char dir = 4; int qn, qa;
 // Date and time functions using a DS3231 RTC connected via I2C and Wire lib
 #include <Wire.h>
 #include <RTClib.h>
@@ -31,7 +33,7 @@ void setup() {
   Serial.println(F("TERM;"));
   delay(100);
   Serial.println(F("\r\n-----------------------------"));
-  Serial.println(F("Smart 666 Version 2.0"));
+  Serial.println(F("Smart 666 Version 2.2"));
   Serial.println(F("Copyright (C) 2016 ZJY"));
   Serial.println(F("-----------------------------\r\n"));
   Serial.println(F("[OK] Serial @ 115200 bps"));
@@ -55,14 +57,19 @@ void setup() {
     Serial.print(F("[OK] "));Serial.print(now.year(), DEC); Serial.print('/'); Serial.print(now.month(), DEC); Serial.print('/'); Serial.println(now.day(), DEC);
     Serial.print(F("     ")); Serial.print(now.hour(), DEC); Serial.print(':'); Serial.print(now.minute(), DEC); Serial.print(':'); Serial.println(now.second(), DEC);
     Serial.print(F("     Temperature: ")); Serial.print(temp); Serial.print(F(" \'C")); Serial.println();
+    // 66tb 24c32
+    Serial.print("[OK] AT24C32 with ");
+    count = mem.readInt(0x0000);
+    Serial.print(count, DEC);
+    Serial.println(" questions.");
   }
-  delay(500);
+  delay(1000);
   Serial.write(26);
   delay(100);
+  Serial.println(F("SNF(0,0);"));
+  delay(500);
   Serial.println(F("SPG(4);"));
   delay(200);
-  /*Serial.print(F("DS24(56,179,'\xCE\xC2\xB6\xC8:")); Serial.print(temp,1); Serial.println(F(" \\'C',16,0);"));
-  delay(500); atMain = true;*/
 }
 
 void on(){
@@ -97,7 +104,7 @@ char getTodayBir (char mon, char day) {
 }*/
 void printTime () {
   DateTime now = rtc.now();
-  Serial.print(F("SBC(53);DS12(127,208,'"));
+  Serial.print(F("SBC(59);DS12(127,208,'"));
   if (now.hour() < 10) { Serial.print(0); Serial.print(now.hour()); } else Serial.print(now.hour()); Serial.print(":");
   if (now.minute() < 10) { Serial.print(0); Serial.print(now.minute()); } else Serial.print(now.minute()); Serial.print(":");
   if (now.second() < 10) { Serial.print(0); Serial.print(now.second()); } else Serial.print(now.second()); Serial.println(F("',16,0);")); //STIM(1,2,3);
@@ -116,11 +123,12 @@ void loop() {
     if (ttl != "OK") {
       int bn;
       if (sscanf(ttl.c_str(), "[SY:%d]\r\n", &bn) == 1) resetFunc();
-      if (sscanf(ttl.c_str(), "[BN:%d]\r\n", &bn) == 1) {      /*ttl != "OK" || ttl != "\r\nOK" || ttl != "\r\nOK\r\n" || ttl != "OK\r\n" || ttl != "OKOK" ) */
+      sscanf(ttl.c_str(), "[AT:%d]OK", &w);
+      if (sscanf(ttl.c_str(), "[BN:%d]\r\n", &bn) == 1) {
+        delay(100);
         scrLoop = 0; scr = false;
-        if (bn == 32) atMain = true; else atMain = false;
-        if (bn == 31 || bn == 1 || bn == 2 || bn == 3) {
-          atCtrl = true;
+        //if (bn == 32) atMain = true; else atMain = false;
+        if (w == 5) { // ctrl
           if (bn == 1) {
             autoC = false; on();
           } else if (bn == 2) {
@@ -128,96 +136,92 @@ void loop() {
           } else if (bn == 3) {
             autoC = !autoC;
           }
-        } else atCtrl = false;
-        if (bn == 27) {
-          sp = new snake();
-          atSnake = true;
-        } else {
-          if (atSnake) {
-            if (bn == 5) dir = 3;
-            else if (bn == 6) dir = 1;
-            else if (bn == 7) dir = 2;
-            else if (bn == 8) dir = 4;
-            else { delete sp; sp = NULL; atSnake = false; }
+        } else if (w == 144) { // fake 66tb
+          if (bn == 7) {
+            if (++qn >= count) qn = 0;
+            qa = readQuestion(qn);
+          } else if (bn == 6) {
+            if (--qn < 0) qn = count - 1;
+            qa = readQuestion(qn);
+          } else if (bn == 5) w = 4; // exit
+          else {
+            if (bn - 1 == qa) Serial.println(F("SBC(54);DS24(0,0,'Correct',16);")); else Serial.println(F("SBC(53);DS24(0,0,'Wrong',16);"));
+            //Serial.print(F("DS24(2,2,'")); Serial.print(tellMeAns(qa)); Serial.println(F("',16);"));
           }
-        }
-        if (bn == 25 || bn == 22 || bn == 21 || bn == 20 || bn == 19 || bn == 18 || bn == 17 || bn == 16) {
-          atRTC = true;
-          DateTime now = rtc.now();
-          DateTime adj;
-          if (bn == 16 || bn == 25) { // switch datetime, 16
-            showTime = !showTime;
-          } else {
-            if (bn == 22) { // up1
-              if (showTime) { // hh
-                adj = DateTime(now + TimeSpan(3600));
-              } else { // YYYY
-                adj = DateTime(now + TimeSpan(365, 0, 0, 0));
-              }
-            } else if (bn == 21) { // down1
-              if (showTime) { // hh
-                adj = DateTime(now - TimeSpan(3600));
-              } else { // YYYY
-                adj = DateTime(now - TimeSpan(365, 0, 0, 0));
-              }
-            } else if (bn == 20) { // up2
-              if (showTime) { // mm
-                adj = DateTime(now + TimeSpan(60));
-              } else { // MM
-                adj = DateTime(now + TimeSpan(30, 0, 0, 0));
-              }
-            } else if (bn == 19) { // down2
-              if (showTime) { // mm
-                adj = DateTime(now - TimeSpan(60));
-              } else { // MM
-                adj = DateTime(now - TimeSpan(30, 0, 0, 0));
-              }
-            } else if (bn == 18) { // up3
-              if (showTime) { // ss
-                adj = DateTime(now + TimeSpan(1)); // +1s
-              } else { // DD
-                adj = DateTime(now + TimeSpan(1, 0, 0, 0));
-              }
-            } else if (bn == 17) { // down3
-              if (showTime) { // ss
-                adj = DateTime(now - TimeSpan(1));
-              } else { // DD
-                adj = DateTime(now - TimeSpan(1, 0, 0, 0));
-              }
+
+        } else if (w == 12) { // snake
+          if (!sp) sp = new snake();
+          if (bn == 2) dir = 3;
+          else if (bn == 3) dir = 1;
+          else if (bn == 4) dir = 2;
+          else if (bn == 5) dir = 4;
+          else { delete sp; sp = NULL; w = 0; /* fake a 'w' else it will create a new snake! */}
+        } else if (w == 11) { // rtc
+          DateTime now = rtc.now(), adj = now;
+          if (bn == 7) showTime = !showTime; // switch datetime
+          else if (bn == 1) { // up1
+            if (showTime) { // hh
+              adj = DateTime(now + TimeSpan(3600));
+            } else { // YYYY
+              adj = DateTime(now + TimeSpan(365, 0, 0, 0));
             }
-            rtc.adjust(adj);
+          } else if (bn == 2) { // down1
+            if (showTime) { // hh
+              adj = DateTime(now - TimeSpan(3600));
+            } else { // YYYY
+              adj = DateTime(now - TimeSpan(365, 0, 0, 0));
+            }
+          } else if (bn == 3) { // up2
+            if (showTime) { // mm
+              adj = DateTime(now + TimeSpan(60));
+            } else { // MM
+              adj = DateTime(now + TimeSpan(30, 0, 0, 0));
+            }
+          } else if (bn == 4) { // down2
+            if (showTime) { // mm
+              adj = DateTime(now - TimeSpan(60));
+            } else { // MM
+              adj = DateTime(now - TimeSpan(30, 0, 0, 0));
+            }
+          } else if (bn == 5) { // up3
+            if (showTime) { // ss
+              adj = DateTime(now + TimeSpan(1)); // +1s
+            } else { // DD
+              adj = DateTime(now + TimeSpan(1, 0, 0, 0));
+            }
+          } else if (bn == 6) { // down3
+            if (showTime) { // ss
+              adj = DateTime(now - TimeSpan(1));
+            } else { // DD
+              adj = DateTime(now - TimeSpan(1, 0, 0, 0));
+            }
           }
-        } else {
-          if (atRTC) {
-            if (bn != 0) atRTC = false;
-          }
+          if (now.unixtime() != adj.unixtime()) rtc.adjust(adj); // Not set if not changed
+        } else if (w == 6) { // count
+          //if (bn == 30 || bn == 29) {
+          if (noAuto)
+            Serial.println("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);"); //DS12(0,0,'RTC模块故障',1);
+          else
+            countLoop = 60;
         }
 
-        if (bn == 30 || bn == 29) {
-          if (noAuto) {
-            Serial.println("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);"); //DS12(0,0,'RTC模块故障',1);
-          } else {
-            atCount = true; countLoop = 60;
-          }
-        } else atCount = false;
-        delay(100);
       }
     }
     ttl = "";
   }
 
 // not always run code
-if (mainLoop == 65535) {
-  if (++scrLoop > 60 && !atSnake && !atCount) {
-    scrLoop = 0; atMain = false; atRTC = false; atCtrl = false; atCount = true; scr = true; return;
+if (++mainLoop == 65535) {
+  if (++scrLoop > 60 && w != 6) {
+    scrLoop = 0; scr = true; w = 6; return;
   }
   // Judge where I am
-  if (atMain) { // at SPG4, main menu, need to refresh temp
-    Serial.print(F("DS24(56,179,'\xCE\xC2\xB6\xC8:")); Serial.print(rtc.getTemperature(),1); Serial.print(F(" \\'C',16,0);")); printTime();
+  if (w == 4) { // at SPG4, main menu, need to refresh temp
+    Serial.print(F("SBC(53);LABL(24,1,179,86,'")); Serial.print(rtc.getTemperature(),1); Serial.print(F(" \\'C',16,1);")); printTime();
   }
 
-  if (atSnake) {
-    if (!sp) atSnake = false;
+  if (w == 12) {
+    if (!sp) return;
     if (sp->hasFood == 0 && random(2) == 0) {
       sp->fx = random(SIZE); sp->fy = random(SIZE); sp->hasFood = 1;
     }
@@ -225,19 +229,24 @@ if (mainLoop == 65535) {
     sp->printSnake();
     if (res == 1 || res == 3) {
       Serial.println(F("SBC(0);DS12(0,208,'Game Over!',15);"));
-      delete sp; atSnake = false;
+      delete sp; sp = NULL;
     } else if (res == 2) {
       Serial.println(F("SBC(0);DS12(0,208,'Invalid direction, pause.',15);"));
     } else if (res == 4) {
       Serial.println(F("SBC(0);DS12(0,208,'Out of memory. You win.',15);"));
-      delete sp; atSnake = false;
+      delete sp; sp = NULL;
     }
   } else {
     delete sp; sp = NULL;
   }
 
+  if (w == 14) { // 66tb
+    qn = random(count);
+    qa = readQuestion(qn);
+    w = 144; // fake
+  }
 
-  if (atCount) { // at SPG6, countDown, need to refresh display mode
+  if (w == 6) { // at SPG6, countDown, need to refresh display mode
       if (countLoop >= 60) {
         countLoop = 0;
         showGK++;
@@ -249,7 +258,7 @@ if (mainLoop == 65535) {
           } else { // not screensaver, return to main
             showGK = -1;
             Serial.println(F("SPG(4);")); delay(200);
-            atCount = false; atMain = true; return;
+            return;
           }
         }
         if (tobir == -1 && showGK == 3) showGK = 0;
@@ -258,13 +267,13 @@ if (mainLoop == 65535) {
           if (showGK == 1) {
             td = dayDiff(now.year(), now.month(), now.day(), 2017, 6, 7);
           } else {
-            td = dayDiff(now.year(), now.month(), now.day(), 2017, 2, 6);
+            td = dayDiff(now.year(), now.month(), now.day(), 2017, 3, 15);
           }
           byte d1 = td / 100; byte d2 = (td - d1 * 100) / 10; byte d3 = (td - d1 * 100 - d2 * 10);
           if (d1 == 0) d1 = 10;
           if (d2 == 0) d2 = 10;
           if (d3 == 0) d3 = 10;
-          Serial.println(F("SPG(6);")); delay(100); Serial.print(F("LABL(24,0,8,175,'\xBE\xE0\xC0\xEB")); Serial.print((showGK) ? F("\xB8\xDF\xBF\xBC") : F("\xBF\xAA\xD1\xA7\xB2\xE2")); Serial.print(F("\xBB\xB9\xD3\xD0',15,1);")); //距离高考/调研考还有
+          Serial.println(F("SPG(6);")); delay(100); Serial.print(F("LABL(24,0,8,175,'\xBE\xE0\xC0\xEB")); Serial.print((showGK) ? F("\xB8\xDF\xBF\xBC") : F("\xD2\xBB\xC4\xA3")); Serial.print(F("\xBB\xB9\xD3\xD0',15,1);")); //距离高考/调研考还有
           Serial.print(F("CPIC(1,104,3,")); Serial.print((d1 - 1) * 60); Serial.print(F(",0,60,81);"));
           Serial.print(F("CPIC(59,104,3,")); Serial.print((d2 - 1) * 60); Serial.print(F(",0,60,81);"));
           Serial.print(F("CPIC(116,104,3,")); Serial.print((d3 - 1) * 60); Serial.print(F(",0,60,81);"));
@@ -282,9 +291,9 @@ if (mainLoop == 65535) {
       }
       countLoop++;
   }
-  if (atCtrl) {
+  if (w == 5) { // ctrl
     if (out) {
-      Serial.print(F("SBC(56);DS24(90,15,'\xBF\xAA',47);")); //DS24(51,59,'开',6,0);
+      Serial.print(F("SBC(56);DS24(90,15,'\xBF\xAA',6);")); //DS24(51,59,'开',6,0);
       Serial.print(F("SBC(52);DS24(66,70,'\xB9\xD8',15);")); //DS24(51,129,'关',0,0);
     } else {
       Serial.print(F("SBC(56);DS24(90,15,'\xBF\xAA',0);")); //DS24(51,59,'开',15,0);
@@ -301,7 +310,8 @@ if (mainLoop == 65535) {
       printTime();
     }
   }
-  if (atRTC) {
+
+  if (w == 11) { // rtc
     if (noAuto) {
       Serial.println(F("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);")); //DS12(0,0,'RTC模块故障',1);
     } else {
@@ -336,7 +346,7 @@ if (mainLoop == 65535) {
       case 14: if (tc >= 0 && tc <= 2000) off(); else on(); break;
       case 15: if (tc >= 503 && tc <= 600) off(); else on(); break;
       case 16: if ((tc >= 3 && tc <= 100) || (tc >= 5003 && tc <= 5100)) off(); else on(); break;
-      case 17: if (tc >= 1000 && tc <= 2000) off(); else on(); break;
+      case 17: if (tc >= 3003 && tc <= 3100) off(); else on(); break;
       case 18: if (tc >= 5000) off(); else on(); break;
       case 20: if (tc >= 2003 && tc <= 2100) off(); else on(); break;
       case 19: case 22: off(); break;
@@ -345,5 +355,4 @@ if (mainLoop == 65535) {
   }
 
 }
-mainLoop++;
 }
