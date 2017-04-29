@@ -1,18 +1,21 @@
-GLOBAL (ABSOLUTE)
-0x0000	×Ü¹²¶àÉÙÌâcount (×î´ó0xFFFF)
-0x0002	µÚ1ÌâµØÖ·
-0x0004	µÚ2ÌâµØÖ·
-¡£¡£¡£
-0x0002 + £¨count-1£© * 2  		µÚnÌâµØÖ·
-0x0002 + count * 2 == (int) *(0x01)	µÚ1ÌâÄÚÈÝ
+ï»¿GLOBAL (ABSOLUTE)
+0x0000	æ€»å…±å¤šå°‘é¢˜count (æœ€å¤§0xFFFF)
+0x0002	é¢˜åº“å¹´ä»½
+0x0004	é¢˜åº“æ—¥æœˆ
+0x0006	ç¬¬1é¢˜åœ°å€
+0x0008	ç¬¬2é¢˜åœ°å€
+ã€‚ã€‚ã€‚
+0x0006 + ï¼ˆcount-1ï¼‰ * 2  		ç¬¬né¢˜åœ°å€
+0x0006 + count * 2 == (int) *(0x01)	ç¬¬1é¢˜å†…å®¹
 
 NORMAL STORAGE BLOCKS (RELATIVE)
-0x00			ÌâÄ¿³¤¶ÈsizeQ£¨×î³¤ÊÜÆÁÄ»ÏÔÊ¾ÏÞÖÆ£¬51*2¸öºº×Ö£¬¼´51*2*2=204¸ö×Ö½Ú£©
-0x01			Ñ¡ÏîA³¤¶ÈsizeA
-0x02			Ñ¡ÏîB³¤¶ÈsizeB
-0x03			Ñ¡ÏîC³¤¶ÈsizeC
-0x04			Ñ¡ÏîD³¤¶ÈsizeD
-0x05			ÕýÈ·´ð°¸
-0x06			ÌâÄ¿ÄÚÈÝ
-0x06 + sizeQ		Ñ¡ÏîAÄÚÈÝ£¨×î´ó8¸öºº×Ö£¬¼´8*2=16×Ö½Ú£©
-0x06 + sizeQ + sizeA	Ñ¡ÏîBÄÚÈÝ
+0x00			å­¦ç§‘ç±»åž‹
+0x01			é¢˜ç›®é•¿åº¦sizeQï¼ˆæœ€é•¿å—å±å¹•æ˜¾ç¤ºé™åˆ¶ï¼Œ51*2ä¸ªæ±‰å­—ï¼Œå³51*2*2=204ä¸ªå­—èŠ‚ï¼‰
+0x02			é€‰é¡¹Aé•¿åº¦sizeA
+0x03			é€‰é¡¹Bé•¿åº¦sizeB
+0x04			é€‰é¡¹Cé•¿åº¦sizeC
+0x05			é€‰é¡¹Dé•¿åº¦sizeD
+0x06			æ­£ç¡®ç­”æ¡ˆ
+0x07			é¢˜ç›®å†…å®¹
+0x07 + sizeQ		é€‰é¡¹Aå†…å®¹ï¼ˆæœ€å¤§8ä¸ªæ±‰å­—ï¼Œå³8*2=16å­—èŠ‚ï¼‰
+0x07 + sizeQ + sizeA	é€‰é¡¹Bå†…å®¹

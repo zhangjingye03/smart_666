@@ -1,23 +1,27 @@
 #include <Arduino.h>
 #include "snake.h"
+#include <EEPROM.h>
 #include "66tb.h"
 #include "birthday.h"
+#include <Wire.h>
+#include <RTClib.h>
+RTC_DS3231 rtc;
 #define AUDIO_CONTROL 4
+#define LATENCYBASE 13107 // 65535 / 5
 
 bool autoC = true;
 bool noAuto = false;
 bool atMain = true;
 unsigned int mainLoop = 0; unsigned char countLoop = 60;
 int w = 4;
-char showGK = -1; bool scr = false; unsigned char scrLoop = 0;
+char showGK = -1; bool scr = false; unsigned int scrLoop = 0;
 bool out = true;
 bool showTime = true;
-snake *sp = NULL;
-char dir = 4; int qn, qa;
-// Date and time functions using a DS3231 RTC connected via I2C and Wire lib
-#include <Wire.h>
-#include <RTClib.h>
-RTC_DS3231 rtc;
+snake *sp = NULL; char dir = 4;
+int qn = -1, qa;
+char syspeed = 5;
+DateTime nextExam; int nextExamNum = 0; int nextExamYear, nextExamMonth, nextExamDay;
+
 
 void setup() {
   float temp;
@@ -28,19 +32,20 @@ void setup() {
   Serial.println("SPG(0);");*/
 
   // LOGO
-  delay(1890);
+  delay(1321);
   Serial.begin(115200);
   Serial.println(F("TERM;"));
   delay(100);
   Serial.println(F("\r\n-----------------------------"));
-  Serial.println(F("Smart 666 Version 2.2"));
-  Serial.println(F("Copyright (C) 2016 ZJY"));
+  Serial.println(F("Smart 666 Version 2.22"));
+  Serial.println(F("Copyright (C) 2016-2017 ZJY"));
   Serial.println(F("-----------------------------\r\n"));
+  EEPROM.get(2, syspeed);
+  if (syspeed == 0) syspeed = 5;
+  Serial.print(F("[OK] System latency -> ")); Serial.println(syspeed, DEC);
   Serial.println(F("[OK] Serial @ 115200 bps"));
   pinMode(4,OUTPUT);
-  pinMode(3,OUTPUT);
   pinMode(13,OUTPUT);
-  digitalWrite(3, HIGH); // for emergency backup
   Serial.print(F("[OK] Audio control @ D")); Serial.println(AUDIO_CONTROL);
   delay(200);
   Serial.println(F("\r\n- Initializing I2C driver ..."));
@@ -50,7 +55,7 @@ void setup() {
     if (rtc.lostPower()) {
       Serial.println(F("[!] RTC lost power. Resetting..."));
       rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-      noAuto = true; autoC = false;
+      /*noAuto = true;*/ autoC = false;
     }
     DateTime now = rtc.now();
     temp = rtc.getTemperature();
@@ -70,6 +75,8 @@ void setup() {
   delay(500);
   Serial.println(F("SPG(4);"));
   delay(200);
+  EEPROM.get(4, nextExamYear); EEPROM.get(6, nextExamMonth); EEPROM.get(8, nextExamDay); EEPROM.get(10, nextExamNum);
+
 }
 
 void on(){
@@ -92,16 +99,21 @@ int dayDiff (int Y1, int M1, int D1, int Y2, int M2, int D2) {
   return (d2 - d1);
 }
 
-char getTodayBir (char mon, char day) {
-  for (char i = 0; i < BIRMEN; i++) {
-    if (mon == birMonth[i] && day == birDay[i]) return i;
+void printExamName () {
+  switch (nextExamNum) {
+    case 0: Serial.print("\xC1\xAA\xBF\xBC"); break; //联考
+    case 1: Serial.print("\xD4\xC2\xBF\xBC"); break; //月考
+    case 2: Serial.print("\xD2\xBB\xC4\xA3"); break; //一模
+    case 3: Serial.print("\xB6\xFE\xC4\xA3"); break; //二模
+    case 4: Serial.print("\xC8\xFD\xC4\xA3"); break; //三模
+    case 5: Serial.print("\xC6\xDA\xD6\xD0\xBF\xBC"); break; //联考
+    case 6: Serial.print("\xC6\xDA\xC4\xA9\xBF\xBC"); break; //联考
+    case 7: Serial.print("\xB5\xF7\xD1\xD0\xBF\xBC"); break; //联考
+    case 8: Serial.print("\xCB\xAE\xC6\xBD\xB2\xE2"); break; //联考
+    case 9: Serial.print("\xB9\xD8\xB1\xD5"); //关闭
   }
-  return -1;
 }
 
-/*void printV (String in) {
-  Serial.print("PS16(0,0,'"); Serial.print(in); Serial.println("',1,0);");
-}*/
 void printTime () {
   DateTime now = rtc.now();
   Serial.print(F("SBC(59);DS12(127,208,'"));
@@ -150,12 +162,12 @@ void loop() {
           }
 
         } else if (w == 12) { // snake
-          if (!sp) sp = new snake();
+          if (!sp && bn != 1 /* 1 == exit */) { sp = new snake(); Serial.println(F("BOXF(8,2,166,168,47);")); /*clear screen*/ }
           if (bn == 2) dir = 3;
           else if (bn == 3) dir = 1;
           else if (bn == 4) dir = 2;
           else if (bn == 5) dir = 4;
-          else { delete sp; sp = NULL; w = 0; /* fake a 'w' else it will create a new snake! */}
+          else if (bn == 1) { delete sp; dir = 4; sp = NULL; w = 0; /* fake a 'w' else it will create a new snake! */}
         } else if (w == 11) { // rtc
           DateTime now = rtc.now(), adj = now;
           if (bn == 7) showTime = !showTime; // switch datetime
@@ -203,7 +215,47 @@ void loop() {
             Serial.println("DS12(0,0,'RTC\xC4\xA3\xBF\xE9\xB9\xCA\xD5\xCF',1);"); //DS12(0,0,'RTC模块故障',1);
           else
             countLoop = 60;
+        } else if (w == 4) { // main page
+          if (bn == 4) sp = new snake();
+          else if (bn == 2) {
+            showGK = -1; countLoop = 60; w = 6;
+          }
+        } else if (w == 10) { // adv
+          if (bn == 3) {
+            if (++syspeed > 5) syspeed = 1;
+            EEPROM.put(2, syspeed);
+          }
+        } else if (w == 166) { // examset fake
+          if (bn == 1) {
+            nextExam = DateTime(nextExam + TimeSpan(365, 0, 0, 0));
+          } else if (bn == 2) {
+            nextExam = DateTime(nextExam - TimeSpan(365, 0, 0, 0));
+          } else if (bn == 3) {
+            nextExam = DateTime(nextExam + TimeSpan(30, 0, 0, 0));
+          } else if (bn == 4) {
+            nextExam = DateTime(nextExam - TimeSpan(30, 0, 0, 0));
+          } else if (bn == 5) {
+            nextExam = DateTime(nextExam + TimeSpan(1, 0, 0, 0));
+          } else if (bn == 6) {
+            nextExam = DateTime(nextExam - TimeSpan(1, 0, 0, 0));
+          } else if (bn >= 10 && bn <= 19) {
+            nextExamNum = bn - 10;
+            Serial.print(F("SBC(0);DS12(0,0,'\xC9\xE8\xD6\xC3\xD2\xD1\xB1\xA3\xB4\xE6\xA3\xBA',16);DS12(0,13,'")); // 设置已保存：
+            if (nextExamNum != 9) { // 9 == no exam
+              nextExamYear = nextExam.year();
+              nextExamMonth = nextExam.month();
+              nextExamDay = nextExam.day();
+              EEPROM.put(4, nextExamYear);
+              EEPROM.put(6, nextExamMonth);
+              EEPROM.put(8, nextExamDay);
+            }
+            EEPROM.put(10, nextExamNum);
+            Serial.print(nextExam.year()); Serial.print(nextExam.month()); Serial.print(nextExam.day()); printExamName();
+            Serial.println(F("',16,0);"));
+            delay(1000); Serial.println(F("SPG(10);"));
+          }
         }
+
 
       }
     }
@@ -211,8 +263,10 @@ void loop() {
   }
 
 // not always run code
-if (++mainLoop == 65535) {
-  if (++scrLoop > 60 && w != 6) {
+if (++mainLoop == syspeed * LATENCYBASE) {
+  mainLoop = 0;
+  if ( w != 6 && ( (++scrLoop > 60 && w != 144) || (scrLoop > 1000 && w == 144) )) { // When doing exercise, extend the delay of scr
+  //if (++scrLoop > 60 && w != 6) {
     scrLoop = 0; scr = true; w = 6; return;
   }
   // Judge where I am
@@ -222,27 +276,45 @@ if (++mainLoop == 65535) {
 
   if (w == 12) {
     if (!sp) return;
+    syspeed = 3;
     if (sp->hasFood == 0 && random(2) == 0) {
       sp->fx = random(SIZE); sp->fy = random(SIZE); sp->hasFood = 1;
     }
     char res = sp->moveSnake(dir);
     sp->printSnake();
     if (res == 1 || res == 3) {
-      Serial.println(F("SBC(0);DS12(0,208,'Game Over!',15);"));
+      int highest = 0; EEPROM.get(0, highest);
+      if (highest >= sp->score) {
+        Serial.print(F("SBC(47);LABL(12,8,163,166,'\xC0\xAC\xBB\xF8, \xD7\xEE\xB8\xDF\xB7\xD6"));
+        Serial.print(highest, DEC);
+        Serial.print(F(", \xC4\xE3\xB2\xC5"));
+        Serial.print(sp->score, DEC);
+        Serial.println(F("',15,1);"));
+      } else {
+        EEPROM.put(0, sp->score);
+        Serial.print(F("SBC(47);LABL(12,8,163,166,'\xCD\xDB! "));
+        Serial.print(sp->score, DEC);
+        Serial.println(F("! \xC4\xE3\xB4\xF2\xC6\xC6\xC1\xCB\xBC\xC7\xC2\xBC\xA3\xA1',15,1"));
+      }
       delete sp; sp = NULL;
     } else if (res == 2) {
-      Serial.println(F("SBC(0);DS12(0,208,'Invalid direction, pause.',15);"));
+      Serial.println(F("SBC(47);LABL(12,8,163,166,'\xD4\xDD\xCD\xA3',15,1);"));
     } else if (res == 4) {
-      Serial.println(F("SBC(0);DS12(0,208,'Out of memory. You win.',15);"));
+      EEPROM.put(0, sp->score);
+      Serial.println(F("SSBC(47);LABL(12,8,163,166,'\xC4\xE3\xD3\xAE\xC1\xCB',15,1);"));
       delete sp; sp = NULL;
+    } else {
+      Serial.print(F("SBC(47);LABL(12,8,163,166,'Score:  ")); Serial.print(sp->score, DEC); Serial.println(F("',15,1);"));
     }
   } else {
-    delete sp; sp = NULL;
+    delete sp; sp = NULL; EEPROM.get(2,syspeed);
   }
 
   if (w == 14) { // 66tb
-    qn = random(count);
-    qa = readQuestion(qn);
+    qn = /*(qn == -1) ? */random(count) /*: qn*/;
+    verYear = mem.readInt(0x0002); verDate = mem.readInt(0x0004);
+    if (mem.readInt(0x0000) == 0) Serial.println("DS16(8,40,'\xB3\xF5\xCA\xBC\xBB\xAF\xCA\xA7\xB0\xDC',16);");
+    else qa = readQuestion(qn);
     w = 144; // fake
   }
 
@@ -252,41 +324,47 @@ if (++mainLoop == 65535) {
         showGK++;
         DateTime now = rtc.now();
         char tobir = getTodayBir(now.month(), now.day());
-        if ((tobir == -1 && showGK > 2) || (tobir != -1 && showGK > 3)) {
+        if (showGK > 2) {
           if (scr) { // screensaver mode, just set to 0
             showGK = 0;
           } else { // not screensaver, return to main
             showGK = -1;
-            Serial.println(F("SPG(4);")); delay(200);
+            Serial.println(F("SPG(4);")); delay(100);
             return;
           }
         }
-        if (tobir == -1 && showGK == 3) showGK = 0;
         if (showGK == 0 || showGK == 1) {
           unsigned int td;
-          if (showGK == 1) {
-            td = dayDiff(now.year(), now.month(), now.day(), 2017, 6, 7);
+          if (showGK == 1 || nextExamNum == 9) {
+            td = dayDiff(now.year(), now.month(), now.day(), (nextExamMonth >= 7) ? (nextExamYear + 1) : nextExamYear, 6, 7);
           } else {
-            td = dayDiff(now.year(), now.month(), now.day(), 2017, 3, 15);
+            td = dayDiff(now.year(), now.month(), now.day(), nextExamYear, nextExamMonth, nextExamDay);
           }
-          byte d1 = td / 100; byte d2 = (td - d1 * 100) / 10; byte d3 = (td - d1 * 100 - d2 * 10);
+          if (td < 0) td = 0;
+          char d1 = td / 100; char d2 = (td - d1 * 100) / 10; char d3 = (td - d1 * 100 - d2 * 10);
           if (d1 == 0) d1 = 10;
           if (d2 == 0) d2 = 10;
           if (d3 == 0) d3 = 10;
-          Serial.println(F("SPG(6);")); delay(100); Serial.print(F("LABL(24,0,8,175,'\xBE\xE0\xC0\xEB")); Serial.print((showGK) ? F("\xB8\xDF\xBF\xBC") : F("\xD2\xBB\xC4\xA3")); Serial.print(F("\xBB\xB9\xD3\xD0',15,1);")); //距离高考/调研考还有
+          Serial.println(F("SPG(6);")); delay(50); Serial.print(F("LABL(24,0,8,175,'\xBE\xE0\xC0\xEB")); //距离
+          if (showGK == 1 || nextExamNum == 9) /*高考*/ Serial.print(F("\xB8\xDF\xBF\xBC")); else printExamName();
+          Serial.print(F("\xBB\xB9\xD3\xD0',15,1);")); //还有
           Serial.print(F("CPIC(1,104,3,")); Serial.print((d1 - 1) * 60); Serial.print(F(",0,60,81);"));
           Serial.print(F("CPIC(59,104,3,")); Serial.print((d2 - 1) * 60); Serial.print(F(",0,60,81);"));
           Serial.print(F("CPIC(116,104,3,")); Serial.print((d3 - 1) * 60); Serial.print(F(",0,60,81);"));
-          if (scr) Serial.println(F("BTN(32,0,0,175,219,0,132);")); else Serial.println(F("BTN(30,0,0,175,219,0);"));
-        } else if (showGK == 3) {
-          Serial.println(F("SPG(13);")); delay(100); Serial.print(F("PLAB(24,0,0,179,'")); Serial.print(now.year()); Serial.print('.'); Serial.print(now.month(),DEC); Serial.print('.');
-          Serial.print(now.day(),DEC); Serial.print(F("',2,1,1);PLAB(48,0,140,179,'")); Serial.print(birName[tobir]); Serial.print(F("',6,1,1);PLAB(24,0,190,179,'"));
-          if (tobir == BIRMEN - 1 || tobir == BIRMEN - 2) Serial.print("17"); else Serial.print("18"); // TWT WPF
-          Serial.print(F("\xCB\xEA\xC9\xFA\xC8\xD5\xBF\xEC\xC0\xD6',59,1,1);"));
-          if (scr) Serial.println(F("BTN(32,0,0,175,219,0,132);")); else Serial.println(F("BTN(30,0,0,175,219,0);"));
+          if (scr) Serial.print(F("BTN(32,0,0,175,219,0,132);")); else Serial.print(F("BTN(30,0,0,175,219,0);"));
+          Serial.println(F("TPN(2);"));
         } else {
-          Serial.print(F("CLS(0);BPIC(1,0,0,15);"));
-          if (scr) Serial.println(F("BTN(32,0,0,175,219,0,132);")); else Serial.println(F("BTN(30,0,0,175,219,0);"));
+          if (tobir == -1) {
+            Serial.println(F("CLS(0);")); delay(50); Serial.print(F("BPIC(1,0,0,15);"));
+          } else {
+            Serial.println(F("SPG(13);")); delay(50); Serial.print(F("PLAB(24,0,0,179,'")); Serial.print(now.year()); Serial.print('.'); Serial.print(now.month(),DEC); Serial.print('.');
+            Serial.print(now.day(),DEC); Serial.print(F("',2,1,1);PLAB(48,0,140,179,'")); Serial.print(birName[tobir]); Serial.print(F("',"));
+            Serial.print(/*isboy?*/(birSex[tobir] == 0) ? 4 : 6); Serial.print(F(",1,1);PLAB(24,0,190,179,'"));
+            if (tobir == BIRMEN - 1 || tobir == BIRMEN - 2) Serial.print("17"); else Serial.print("18"); // TWT WPF
+            Serial.print(F("\xCB\xEA\xC9\xFA\xC8\xD5\xBF\xEC\xC0\xD6',59,1,1);"));
+          }
+          if (scr) Serial.print(F("BTN(32,0,0,175,219,0,132);")); else Serial.print(F("BTN(30,0,0,175,219,0);"));
+          Serial.println(F("TPN(2);"));
         }
       }
       countLoop++;
@@ -330,29 +408,44 @@ if (++mainLoop == 65535) {
     }
   }
 
+  if (w == 10) { //adv
+    Serial.print(F("SBC(54);DS24(32,140,'\xD1\xD3\xCA\xB1\xBC\xB6\xB1\xF0 ")); Serial.print(syspeed, DEC);
+    Serial.println(F("',0,0);"));
+  }
+
+  if (w == 16) { // examset
+      nextExam = rtc.now();
+      w = 166; // fake
+  }
+
+  if (w == 166) { // examset fake
+    Serial.print(F("SBC(0);DS32(18,35,'")); Serial.print(nextExam.year()); Serial.print(F("',1,0);DS32(66,35,'/',1,0);DS32(82,35,'"));
+    Serial.print(nextExam.month()); Serial.print(F("',1,0);DS32(115,35,'/',1,0);DS32(136,35,'"));
+    Serial.print(nextExam.day()); Serial.println(F("',1,0);"));
+  }
+
   // Global auto audio control
   if (autoC) {
     DateTime now = rtc.now();
-    byte h = now.hour(); byte m = now.minute(); byte s = now.second();
+    char h = now.hour(); char m = now.minute(); char s = now.second();
     int tc = m * 100 + s;
     switch (h) {
-      case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: on(); break;
+      case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 21: case 23: on(); break;
+      case 13: case 19: case 22: off(); break;
       case 8: if (tc >= 3003 && tc <= 3100) off(); else on(); break;
       case 9: if (tc >= 2003 && tc <= 2100) off(); else on(); break;
       case 10: if (tc >= 1003 && tc <= 1100) off(); else on(); break;
       case 11: if (tc >= 1503 && tc <= 1600) off(); else on(); break;
-      case 12: if ((tc >= 503 && tc <= 600) || tc >= 5500) off(); else on(); break;
-      case 13: off(); break;
+      case 12: if (tc >= 503) off(); else on(); break;
       case 14: if (tc >= 0 && tc <= 2000) off(); else on(); break;
       case 15: if (tc >= 503 && tc <= 600) off(); else on(); break;
       case 16: if ((tc >= 3 && tc <= 100) || (tc >= 5003 && tc <= 5100)) off(); else on(); break;
-      case 17: if (tc >= 3003 && tc <= 3100) off(); else on(); break;
+      case 17: if (tc >= 5003 && tc <= 5100) off(); else on(); break;
       case 18: if (tc >= 5000) off(); else on(); break;
       case 20: if (tc >= 2003 && tc <= 2100) off(); else on(); break;
-      case 19: case 22: off(); break;
-      case 21: case 23: on(); break;
     }
   }
+  int randomize = random(2); // generate a new rand every loop
 
 }
 }

@@ -5,12 +5,12 @@
 class snake {
   // Public members
   public:
-    char tail, hasFood, fx, fy;
+    char tail, hasFood, fx, fy; int score;
     // Constructor
     snake () {
       xs[0] = 3; ys[0] = 1;
       xs[1] = 2; ys[1] = 1;
-      tail = 1; hd = 4;
+      tail = 1; hd = 4; hasFood = 0; score = 0;
     }
     // Moving function
     char moveSnake (char dir) {
@@ -29,7 +29,7 @@ class snake {
       hd = dir;
       // If meet with food, eat it and append it to the tail
       if (jx == fx && jy == fy && hasFood == 1) {
-        xs[tail + 1] = xs[tail]; ys[tail + 1] = ys[tail]; hasFood = 2;
+        xs[tail + 1] = xs[tail]; ys[tail + 1] = ys[tail]; hasFood = 2; score += 100;
       }
       // From tail, move its position to last snake block
       for (char i = tail; i > 0; i--) {
@@ -45,6 +45,7 @@ class snake {
         // Out of memory
         if (++tail == LIMIT) return 4;
       }
+      if (score > 0) --score;
       return 0;
     }
     // Print function
@@ -63,7 +64,7 @@ class snake {
       unsigned char ty = 2 + 160 / SIZE * py;
       Serial.print(F("BOXF(")); Serial.print(tx); Serial.print(','); Serial.print(ty); Serial.print(',');
       Serial.print(tx + 160 / SIZE - 1); Serial.print(','); Serial.print(ty + 160 / SIZE - 1); Serial.print(',');
-      Serial.print(pc,DEC); Serial.print(");");
+      Serial.print(pc,DEC); Serial.println(");");
     }
   // Private members
   private:
